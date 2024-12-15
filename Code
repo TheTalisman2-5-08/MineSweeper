@@ -1,0 +1,236 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+
+public class Minesweeper extends JFrame {
+    private final int ROWS = 9;
+    private final int COLS = 9;
+    private final int MINES = 10;
+    private final int GAME_DURATION_SECONDS = 300; // 5 minutes in seconds
+    private JButton[][] buttons;
+    private boolean[][] mines;
+    private boolean[][] revealed;
+    private int remainingMines;
+    private JLabel minesLeftLabel;
+    private JLabel timeLabel;
+    private Timer timer;
+    private int remainingSeconds;
+
+    public Minesweeper() {
+        setTitle("Minesweeper");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+
+        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        minesLeftLabel = new JLabel();
+        timeLabel = new JLabel();
+        topPanel.add(minesLeftLabel);
+        topPanel.add(timeLabel);
+        add(topPanel, BorderLayout.NORTH);
+
+        JPanel gamePanel = new JPanel(new GridLayout(ROWS, COLS));
+        buttons = new JButton[ROWS][COLS];
+        mines = new boolean[ROWS][COLS];
+        revealed = new boolean[ROWS][COLS];
+
+        initializeButtons();
+        initializeGame();
+        addButtons(gamePanel);
+        add(gamePanel, BorderLayout.CENTER);
+
+        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton resetButton = new JButton("Reset");
+        resetButton.addActionListener(e -> resetGame());
+        bottomPanel.add(resetButton);
+        add(bottomPanel, BorderLayout.SOUTH);
+
+        pack();
+        setLocationRelativeTo(null);
+        setVisible(true);
+    }
+
+    private void initializeButtons() {
+        for (int row = 0; row < ROWS; row++) {
+            for (int col = 0; col < COLS; col++) {
+                buttons[row][col] = new JButton();
+                buttons[row][col].setPreferredSize(new Dimension(30, 30));
+            }
+        }
+    }
+
+    private void initializeGame() {
+        remainingMines = MINES;
+        minesLeftLabel.setText("Mines Left: " + remainingMines);
+        timeLabel.setText("Time: " + formatTime(GAME_DURATION_SECONDS));
+
+        for (int row = 0; row < ROWS; row++) {
+            for (int col = 0; col < COLS; col++) {
+                mines[row][col] = false;
+                revealed[row][col] = false;
+                buttons[row][col].setText("");
+                buttons[row][col].setEnabled(true);
+                buttons[row][col].setBackground(Color.LIGHT_GRAY);
+            }
+        }
+
+        for (int i = 0; i < MINES; i++) {
+            int row = (int) (Math.random() * ROWS);
+            int col = (int) (Math.random() * COLS);
+            if (!mines[row][col]) {
+                mines[row][col] = true;
+            } else {
+                i--;
+            }
+        }
+    }
+
+    private void addButtons(JPanel gamePanel) {
+        for (int row = 0; row < ROWS; row++) {
+            for (int col = 0; col < COLS; col++) {
+                buttons[row][col].addMouseListener(new ButtonListener(row, col));
+                gamePanel.add(buttons[row][col]);
+            }
+        }
+    }
+
+    private int countAdjacentMines(int row, int col) {
+        int count = 0;
+        for (int i = Math.max(row - 1, 0); i <= Math.min(row + 1, ROWS - 1); i++) {
+            for (int j = Math.max(col - 1, 0); j <= Math.min(col + 1, COLS - 1); j++) {
+                if (mines[i][j]) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    private void revealEmptyAdjacents(int row, int col) {
+        if (row < 0 || row >= ROWS || col < 0 || col >= COLS || revealed[row][col]) {
+            return;
+        }
+
+        revealed[row][col] = true;
+        int adjacentMines = countAdjacentMines(row, col);
+        buttons[row][col].setText(adjacentMines > 0 ? String.valueOf(adjacentMines) : "");
+        buttons[row][col].setBackground(adjacentMines > 0 ? Color.GREEN : Color.LIGHT_GRAY);
+
+        if (adjacentMines == 0) {
+            revealEmptyAdjacents(row - 1, col);
+            revealEmptyAdjacents(row + 1, col);
+            revealEmptyAdjacents(row, col - 1);
+            revealEmptyAdjacents(row, col + 1);
+        }
+    }
+
+    private void checkGameOver() {
+        boolean gameOver = true;
+        for (int row = 0; row < ROWS; row++) {
+            for (int col = 0; col < COLS; col++) {
+                if (!mines[row][col] && !revealed[row][col]) {
+                    gameOver = false;
+                    break;
+                }
+            }
+        }
+
+        if (gameOver) {
+            JOptionPane.showMessageDialog(this, "Congratulations! You won the game!");
+            System.exit(0);
+        }
+    }
+
+    private void startTimer() {
+        remainingSeconds = GAME_DURATION_SECONDS;
+        timer = new Timer(1000, e -> {
+            remainingSeconds--;
+            timeLabel.setText("Time: " + formatTime(remainingSeconds));
+
+            if (remainingSeconds == 0) {
+                timer.stop();
+                revealMines();
+                JOptionPane.showMessageDialog(Minesweeper.this, "Time's up! Game Over!");
+                resetGame();
+            }
+        });
+        timer.start();
+    }
+
+    private String formatTime(int seconds) {
+        int minutes = seconds / 60;
+        int remainingSeconds = seconds % 60;
+        return String.format("%02d:%02d", minutes, remainingSeconds);
+    }
+
+    private void resetGame() {
+        initializeGame();
+        if (timer != null) {
+            timer.stop();
+        }
+    }
+
+    private class ButtonListener extends MouseAdapter {
+        private final int row;
+        private final int col;
+
+        public ButtonListener(int row, int col) {
+            this.row = row;
+            this.col = col;
+        }
+
+        @Override
+        public void mousePressed(MouseEvent e) {
+            if (e.getButton() == MouseEvent.BUTTON1) {
+                if (!revealed[row][col]) {
+                    if (mines[row][col]) {
+                        revealMines();
+                        buttons[row][col].setBackground(Color.RED);
+                        JOptionPane.showMessageDialog(Minesweeper.this, "Game Over!");
+                        resetGame();
+                    } else {
+                        if (timer == null) {
+                            startTimer();
+                        }
+                        Minesweeper.this.revealEmptyAdjacents(row, col);
+                        Minesweeper.this.checkGameOver();
+                    }
+                }
+            } else if (e.getButton() == MouseEvent.BUTTON3) {
+                if (!revealed[row][col]) {
+                    if (buttons[row][col].getText().isEmpty()) {
+                        buttons[row][col].setText("?");
+                        remainingMines--;
+                        minesLeftLabel.setText("Mines Left: " + remainingMines);
+                    } else {
+                        buttons[row][col].setText("");
+                        remainingMines++;
+                        minesLeftLabel.setText("Mines Left: " + remainingMines);
+                    }
+                }
+            }
+        }
+    }
+
+    private void revealMines() {
+        for (int row = 0; row < ROWS; row++) {
+            for (int col = 0; col < COLS; col++) {
+                if (mines[row][col]) {
+                    buttons[row][col].setText("💣");
+                    buttons[row][col].setEnabled(false);
+                    buttons[row][col].setBackground(Color.RED);
+                }
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            try {
+                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            new Minesweeper();
+        });
+    }
+}
